@@ -11,6 +11,14 @@ class Toggle extends React.Component {
     onReset: () => {},
     stateReducer: (state, changes) => changes,
   }
+  // 💰 any time I use a string as an identifier for a type,
+  // I prefer to give it a variable name. That way folks who
+  // want to reference the type can do so using variable which
+  // will help mitigate the problems of indirection.
+  static stateChangeTypes = {
+    reset: '__toggle_reset__',
+    toggle: '__toggle_toggle__',
+  }
   initialState = {on: this.props.initialOn}
   state = this.initialState
   internalSetState(changes, callback) {
@@ -18,31 +26,30 @@ class Toggle extends React.Component {
       // handle function setState call
       const changesObject =
         typeof changes === 'function' ? changes(state) : changes
+
       // apply state reducer
       const reducedChanges = this.props.stateReducer(state, changesObject) || {}
-      // 🐨  in addition to what we've done, let's pluck off the `type`
-      // property and return an object only of the state changes
-      // 💰 to remove the `type`, you can destructure the changes:
-      // `{type, ...c}`
-      return Object.keys(reducedChanges).length ? reducedChanges : null
+
+      // remove the type so it's not set into state
+      const {type: ignoredType, ...onlyChanges} = reducedChanges
+
+      // return null if there are no changes to be made
+      return Object.keys(onlyChanges).length ? onlyChanges : null
     }, callback)
   }
+
   reset = () =>
-    // 🐨 add a `type` string property to this call
-    this.internalSetState(this.initialState, () =>
-      this.props.onReset(this.state.on),
-    )
-  // 🐨 accept a `type` property here and give it a default value
-  toggle = () =>
     this.internalSetState(
-      // pass the `type` string to this object
-      ({on}) => ({on: !on}),
+      {...this.initialState, type: Toggle.stateChangeTypes.reset},
+      () => this.props.onReset(this.state.on),
+    )
+  toggle = ({type = Toggle.stateChangeTypes.toggle} = {}) =>
+    this.internalSetState(
+      ({on}) => ({type, on: !on}),
       () => this.props.onToggle(this.state.on),
     )
   getTogglerProps = ({onClick, ...props} = {}) => ({
-    // 🐨 change `this.toggle` to `() => this.toggle()`
-    // to avoid passing the click event to this.toggle.
-    onClick: callAll(onClick, this.toggle),
+    onClick: callAll(onClick, () => this.toggle()),
     'aria-expanded': this.state.on,
     ...props,
   })
@@ -59,9 +66,6 @@ class Toggle extends React.Component {
   }
 }
 
-// Don't make changes to the Usage component. It's here to show you how your
-// component is intended to be used and is used in the tests.
-// You can make all the tests pass by updating the Toggle component.
 class Usage extends React.Component {
   static defaultProps = {
     onToggle: (...args) => console.log('onToggle', ...args),
